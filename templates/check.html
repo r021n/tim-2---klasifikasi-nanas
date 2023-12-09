@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-
+	<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 <head>
 	<meta charset="UTF-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -128,9 +128,14 @@
 				<h5 class="card-header">CHECK</h5>
 				<div class="card-body">
 					<div class="atas" style="justify-content: center; justify-items: stretch;">
-						<video id="video" width="480" height="240" style="padding: 5px auto;" autoplay></video>
-						<button class="btn btn-primary d-block mx-auto" id="snap">Ambil Foto</button>
-						<img id="processed_image" src="" alt="Processed Image" class="d-block" tyle="margin: 5px auto;">
+						<!-- Elemen untuk menampilkan video dari kamera -->
+						<video style="padding: 5px auto;" id="video" width="640" height="480" autoplay></video>
+
+						<!-- Tombol untuk mengambil foto dari kamera -->
+						<button class="btn btn-primary d-block mx-auto" id="snap">Snap Photo</button>
+
+						<!-- Elemen canvas untuk menampilkan gambar dan bounding boxes -->
+						<canvas class="d-block" width="640" height="480" id="canvas"></canvas>
 					</div>
 
 				</div>
@@ -142,7 +147,7 @@
 						<table class="table table-striped">
 							<tr>
 								<th>Kategori</th>
-								<th>Jumlah</th>
+								<th>jumlah</th>
 							</tr>
 							<tr>
 								<td>Mentah</td>
@@ -150,7 +155,7 @@
 							</tr>
 							<tr>
 								<td>Kurang Matang</td>
-								<td id="kurang-matang"></td>
+								<td id="kurang_matang"></td>
 							</tr>
 							<tr>
 								<td>Matang</td>
@@ -158,7 +163,7 @@
 							</tr>
 							<tr>
 								<td>Terlalu Matang</td>
-								<td id="terlalu-matang"></td>
+								<td id="terlalu_matang"></td>
 							</tr>
 						</table>
 					</div>
@@ -174,60 +179,121 @@
 	</div>
 	</div>
 	<script>
-		var socket = io.connect('http://' + document.domain + ':' + location.port);
+        var video = document.getElementById('video');  // Mendapatkan elemen video dari HTML
+        var canvas = document.getElementById('canvas');  // Mendapatkan elemen canvas dari HTML
+        var context = canvas.getContext('2d');  // Mendapatkan konteks gambar 2D dari canvas
+        var snap = document.getElementById('snap');  // Mendapatkan elemen tombol 'Snap Photo'
 
-		socket.on('update', function (data) {
-			var img_data = data.img_data;
-			document.getElementById("processed_image").src = "data:image/png;base64," + img_data;
-		});
+        // variabel menyimpan jumlah nanas yang tedeteksi
+        let jumlahMentah = 0
+        let jumlahKurangMatang = 0
+        let jumlahMatang = 0
+        let jumlahTerlaluMatang = 0
 
-		socket.on('update_counts', function (counts) {
-			document.getElementById("mentah").innerText = counts.mentah;
-			document.getElementById("kurang-matang").innerText = counts["kurang matang"];
-			document.getElementById("matang").innerText = counts.matang;
-			document.getElementById("terlalu-matang").innerText = counts["terlalu matang"];
+        // Mendapatkan akses ke kamera
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ video: true }).then(function (stream) {
+                video.srcObject = stream;  // Mengatur objek sumber video ke stream dari kamera
+                video.play();  // Memulai pemutaran video
+            });
+        }
 
-			const xArray = Object.keys(counts);
-			const yArray = Object.values(counts);
+        // Event listener untuk tombol "Snap Photo"
+        snap.addEventListener('click', function () {
+            // Mengambil gambar dari video
+            context.drawImage(video, 0, 0);
 
-			const layout = { title: "Deteksi Nanas" };
-			const data = [{ labels: xArray, values: yArray, type: "pie" }];
+            // Mengambil data URL dari gambar di canvas
+            var imageDataURL = canvas.toDataURL();
 
-			Plotly.newPlot("myPlot", data, layout);
-		});
+            // Membuat objek FormData untuk mengirim data ke backend
+            var data = new FormData();
+            data.append("image_file", dataURItoBlob(imageDataURL), "image_file");
 
-		// Akses video stream dari kamera
-		navigator.mediaDevices.getUserMedia({ video: true })
-			.then(function (stream) {
-				var video = document.getElementById('video');
-				video.srcObject = stream;
-				video.play();
-			})
-			.catch(function (err) {
-				console.log("Terjadi error: " + err);
-			});
+            // Mengirim data ke backend menggunakan fetch
+            fetch("/detect", {
+                method: "post",
+                body: data
+            })
+                .then(response => response.json())
+                .then(boxes => {
+                    // Memanggil fungsi untuk menggambar gambar dan bounding boxes
+                    draw_image_and_boxes(dataURItoBlob(imageDataURL), boxes);
+                });
+        });
 
-		document.getElementById("snap").addEventListener("click", function () {
-			var aspectRatio = video.videoWidth / video.videoHeight;
-			var canvasWidth = 480;
-			var canvasHeight = canvasWidth / aspectRatio;
+        // Fungsi untuk menggambar gambar dari file dan bounding boxes
+        function draw_image_and_boxes(file, boxes) {
+            var img = new Image();
+            img.src = URL.createObjectURL(file);
+            img.onload = function () {
+                context.clearRect(0, 0, canvas.width, canvas.height);  // Menghapus gambar sebelumnya di canvas
+                canvas.width = img.width;  // Mengatur lebar canvas sesuai dengan lebar gambar
+                canvas.height = img.height;  // Mengatur tinggi canvas sesuai dengan tinggi gambar
+                context.drawImage(img, 0, 0, canvas.width, canvas.height);  // Menggambar gambar di canvas
+                context.strokeStyle = "#00FF00";  // Warna garis untuk bounding boxes
+                context.lineWidth = 3;  // Ketebalan garis bounding boxes
+                context.font = "18px serif";  // Font teks untuk label bounding boxes
+                boxes.forEach(([x1, y1, x2, y2, label]) => {
+                    context.strokeRect(x1, y1, x2 - x1, y2 - y1);  // Menggambar bounding box
+                    context.fillStyle = "#00ff00";  // Warna latar belakang label
+                    var width = context.measureText(label).width;
+                    context.fillRect(x1, y1, width + 10, 25);  // Menggambar latar belakang label
+                    context.fillStyle = "#000000";  // Warna teks label
+                    context.fillText(label, x1, y1 + 18);  // Menuliskan teks label
+                });
 
-			// Membuat elemen canvas sementara untuk mengambil gambar
-			var canvas = document.createElement('canvas');
-			canvas.width = canvasWidth;
-			canvas.height = canvasHeight;
+                // reset jumlah nanas yang terdeteksi
+                jumlahMentah = 0
+                jumlahKurangMatang = 0
+                jumlahMatang = 0
+                jumlahTerlaluMatang = 0
 
-			var context = canvas.getContext('2d');
-			context.drawImage(video, 0, 0, canvasWidth, canvasHeight);
-			var dataUrl = canvas.toDataURL('image/png');
+                // Update jumlah nanas terdeteksi sesuai label
+                boxes.forEach(([x1, y1, x2, y2, label, prob]) => {
+                    switch (label) {
+                        case "Mentah":
+                            jumlahMentah++;
+                            break;
+                        case "Kurang Matang":
+                            jumlahKurangMatang++;
+                            break;
+                        case "Matang":
+                            jumlahMatang++;
+                            break;
+                        case "Terlalu Matang":
+                            jumlahTerlaluMatang++;
+                            break;
+                    }
+                });
 
-			// Kirim dataUrl ke server menggunakan AJAX
-			var xhr = new XMLHttpRequest();
-			xhr.open('POST', '/upload', true);
-			xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-			xhr.send('img=' + encodeURIComponent(dataUrl));
-		});
-	</script>
+                // menampilkan jumlah nanas yang terdeteksi pada tabel
+                document.getElementById('mentah').innerText = jumlahMentah
+                document.getElementById('kurang_matang').innerText = jumlahKurangMatang
+                document.getElementById('matang').innerText = jumlahMatang
+                document.getElementById('terlalu_matang').innerText = jumlahTerlaluMatang
+
+                // menampilkan grafik chart
+                const xArray = ["Mentah", "Kurang Matang", "Matang", "Terlalu Matang"];
+                const yArray = [jumlahMentah, jumlahKurangMatang, jumlahMatang, jumlahTerlaluMatang];
+                const layout = {title:"Grafik Kategori Kematangan Nanas"};
+                const data = [{labels:xArray, values:yArray, type:"pie"}];
+                Plotly.newPlot("myPlot", data, layout);
+            };
+        }
+
+
+        // Fungsi untuk mengubah data URL menjadi blob
+        function dataURItoBlob(dataURI) {
+            var byteString = atob(dataURI.split(',')[1]);
+            var ab = new ArrayBuffer(byteString.length);
+            var ia = new Uint8Array(ab);
+            for (var i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            return new Blob([ab], { type: 'image/png' });
+        }
+    </script>
 </body>
 
 </html>
