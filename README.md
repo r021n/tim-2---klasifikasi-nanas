@@ -2,28 +2,36 @@ Repository ini berisi kode Python untuk membuat aplikasi web sederhana. Aplikasi
 
 Langkah-langkah penggunaan:
 
-Buat environment Python
+## Buat environment Python
 Untuk membuat environment Python, Anda dapat menggunakan perintah berikut:
 
+```python
 python -m venv env
+```
 Perintah ini akan membuat folder baru bernama env di direktori saat ini. Folder ini berisi semua file yang diperlukan untuk menjalankan aplikasi Anda.
 
-Install library Python
+## Install library Python
 Untuk menginstal library Python yang diperlukan, Anda dapat menggunakan perintah berikut:
 
+```python
 pip install -r requirements.txt
+```
 Perintah ini akan menginstal semua library Python yang tercantum dalam file requirements.txt.
 
-Aktifkan environment
+## Aktifkan environment
 Untuk mengaktifkan environment Python, Anda dapat menggunakan perintah berikut:
 
+```python
 source env/bin/activate
+```
 Perintah ini akan mengaktifkan environment Python bernama env.
 
-Jalankan aplikasi
+## Jalankan aplikasi
 Untuk menjalankan aplikasi, Anda dapat menggunakan perintah berikut:
 
+```python
 flask run
+```
 Perintah ini akan menjalankan aplikasi Anda di port 5000. Anda dapat mengakses aplikasi Anda di http://localhost:5000.
 
 Contoh penggunaan:
